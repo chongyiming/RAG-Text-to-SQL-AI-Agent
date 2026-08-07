@@ -8,6 +8,9 @@ import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 import streamlit as st
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 load_dotenv()
 
@@ -25,6 +28,12 @@ db = SQLDatabase.from_uri(uri)
 # llm = ChatOllama(model="qwen3.5:2b")
 llm=ChatGoogleGenerativeAI(model="gemini-3.6-flash")
 
+# checkpointer=InMemorySaver()
+connection=sqlite3.connect("resources/checkpoint.db",check_same_thread=False)
+checkpointer=SqliteSaver(connection)
+checkpointer.setup()
+
+config={"configurable":{"thread_id":"thread_1"}}
 
 @tool(description="Get the database schema and sample rows.")
 def get_schema() -> str:
@@ -37,6 +46,7 @@ def run_query(query: str) -> str:
 agent = create_agent(
     model=llm,
     tools=[get_schema, run_query],
+    checkpointer=checkpointer,
     system_prompt="""
     You are a SQL Server expert.
 
@@ -69,7 +79,7 @@ for message in st.session_state["message"]:
     st.chat_message(message["role"]).write(message["content"])
 
 prompt = st.chat_input(
-    "Describe the ingredients that you have or upload ingredients photo",
+    "Ask your database a question...",
 )
 
 
@@ -82,6 +92,7 @@ if prompt:
 
     with st.spinner():
 
-        result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
+        result = agent.invoke({"messages": [{"role": "user", "content": prompt}]},config=config)
+        print(result)
         st.chat_message("assistant").write(result["messages"][-1].content[0]["text"])
         st.session_state["message"].append({"role":"assistant","content":result["messages"][-1].content[0]["text"]})
