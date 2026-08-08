@@ -56,7 +56,7 @@ def sync_knowledge_base():
     save_embeddings(chunks,embeddings)
 sync_knowledge_base()
 
-if st.button("Click Me"):
+if st.button("Sync Knowledge Base"):
   try:
     chromadb_client.delete_collection(name="default")
     chromadb_collection = chromadb_client.get_or_create_collection(name="default")
