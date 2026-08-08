@@ -25,7 +25,7 @@ uri = (
     f"mssql+pyodbc://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_SERVER}:1434/{SQL_DATABASE}"
     "?driver=ODBC+Driver+17+for+SQL+Server"
 )
-# db = SQLDatabase.from_uri(uri)
+db = SQLDatabase.from_uri(uri)
 
 llm=ChatGoogleGenerativeAI(model="gemini-3.6-flash")
 embedding_model=SentenceTransformer("shibing624/text2vec-base-chinese")
@@ -73,13 +73,13 @@ checkpointer.setup()
 
 config={"configurable":{"thread_id":"thread_1"}}
 
-# @tool(description="Get the database schema and sample rows.")
-# def get_schema() -> str:
-#     return db.table_info
+@tool(description="Get the database schema and sample rows.")
+def get_schema() -> str:
+    return db.table_info
 
-# @tool(description="Run a SQL Server SELECT query against the database and return the results.")
-# def run_query(query: str) -> str:
-#     return QuerySQLDataBaseTool(db=db).invoke(query)
+@tool(description="Run a SQL Server SELECT query against the database and return the results.")
+def run_query(query: str) -> str:
+    return QuerySQLDataBaseTool(db=db).invoke(query)
 
 @tool(description="Retrieve the top-k most semantically similar documents using embedding-based vector search.")
 def retrieve(query:str, top_k:int)->list:
@@ -106,7 +106,7 @@ def rerank(query:str, retrieved_chunks:list,top_k:int)->list:
 agent = create_agent(
     model=llm,
     # tools=[get_schema, run_query],
-    tools=[retrieve, rerank],
+    tools=[retrieve, rerank,get_schema, run_query],
     checkpointer=checkpointer,
     system_prompt = """ You are a SQL Server and knowledge retrieval expert. Your goal is to answer the user's question accurately using the most appropriate available tools. Workflow: 1. Understand the user's request and determine what type of information is needed. 2. Decide whether the answer should come from: - SQL Server: when the user asks for structured, transactional, or database data. - Vector database / knowledge base: when the user asks about documentation, descriptions, explanations, business rules, or unstructured information. - Both: when the question requires combining database data with information from the knowledge base. 3. If SQL Server is required: - Inspect the database schema if you haven't already. - Never invent tables or columns. - Generate valid SQL Server SQL. - Only generate SELECT statements. Never modify database data. - Execute the query using run_query. 4. If the vector database is required: - Search the knowledge base using the appropriate retrieval tool. - Use the retrieved information to answer the user's question. 5. If both sources are required: - Retrieve relevant knowledge from the vector database. - Query SQL Server for the required structured data. - Combine the information to produce the final answer. 6. If the available information is insufficient, clearly state what information is missing instead of guessing. Final response: - If SQL Server was queried, ALWAYS include the exact SQL query that was executed in a ```sql code block before showing the results. - If no SQL query was executed, do not include an SQL code block. - Present results in a clear and readable format. - Do not expose internal reasoning or tool-selection decisions. Important: - Never invent database tables, columns, values, or knowledge. - Use retrieved information as the source of truth. - Do not execute INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or other write operations. """,
 )
