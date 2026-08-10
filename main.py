@@ -37,6 +37,7 @@ def split_into_chunks(doc_file:str)->list:
         content=file.read()
     return [chunk for chunk in content.split("\n\n")]
 
+@tool(description="Generate an embedding for a given text chunk.")
 def embed_chunk(chunk:str)->list:
     embedding=embedding_model.encode(chunk)
     return embedding.tolist()
@@ -102,12 +103,68 @@ def rerank(query:str, retrieved_chunks:list,top_k:int)->list:
     return [chunk for chunk, _ in chunk_with_score_list][:top_k]
 
 
+
+@tool(description="Write the useful info to a txt document.")
+def write_to_doc(info:str):
+    with open("doc.txt", "a") as file:
+        file.write(info)
+
+
+
 agent = create_agent(
     model=llm,
     # tools=[get_schema, run_query],
     tools=[retrieve, rerank,get_schema, run_query],
     checkpointer=checkpointer,
     system_prompt = """ You are a SQL Server and knowledge retrieval expert. Your goal is to answer the user's question accurately using the most appropriate available tools. Workflow: 1. Understand the user's request and determine what type of information is needed. 2. Decide whether the answer should come from: - SQL Server: when the user asks for structured, transactional, or database data. - Vector database / knowledge base: when the user asks about documentation, descriptions, explanations, business rules, or unstructured information. - Both: when the question requires combining database data with information from the knowledge base. 3. If SQL Server is required: - Inspect the database schema if you haven't already. - Never invent tables or columns. - Generate valid SQL Server SQL. - Only generate SELECT statements. Never modify database data. - Execute the query using run_query. 4. If the vector database is required: - Search the knowledge base using the appropriate retrieval tool. - Use the retrieved information to answer the user's question. 5. If both sources are required: - Retrieve relevant knowledge from the vector database. - Query SQL Server for the required structured data. - Combine the information to produce the final answer. 6. If the available information is insufficient, clearly state what information is missing instead of guessing. Final response: - If SQL Server was queried, ALWAYS include the exact SQL query that was executed in a ```sql code block before showing the results. - If no SQL query was executed, do not include an SQL code block. - Present results in a clear and readable format. - Do not expose internal reasoning or tool-selection decisions. Important: - Never invent database tables, columns, values, or knowledge. - Use retrieved information as the source of truth. - Do not execute INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or other write operations. """,
+)
+
+
+agent1 = create_agent(
+    model=llm,
+    tools=[write_to_doc,embed_chunk,retrieve ],
+    system_prompt="""You are a conversation summarization and knowledge-extraction agent.
+
+Your job: read the user's input, extract distinct worth-remembering facts, and store only genuinely new information — never duplicates.
+
+## Step 1 — Extract candidate facts
+Identify distinct, worth-remembering pieces of information in the input:
+- Stable facts about the user (preferences, goals, constraints, identity)
+- Decisions, conclusions, commitments, action items
+- Named entities and their relationships
+Skip small talk, one-off transient questions, and anything you're not confident is accurate or complete.
+
+Rewrite each candidate as a short, self-contained, neutral statement:
+- No dangling pronouns ("it", "they") without a clear antecedent
+- No meta-framing like "the user said..." — state the fact itself
+- One distinct fact per candidate — don't merge unrelated facts together
+
+## Step 2 — Check for duplicates BEFORE embedding or writing
+For EACH candidate fact, in this exact order:
+1. Call `retrieve` with the candidate fact (or its key terms) to search existing memory.
+2. Compare the retrieved results to the candidate:
+   - If a highly similar or equivalent fact already exists → SKIP this candidate entirely. Do not call `embed_chunk` or `write_to_doc` for it.
+   - If nothing similar is found → proceed to Step 3 for this candidate.
+
+Never skip the retrieve step, even if you're confident the fact is new. Never embed or write a candidate before checking it.
+
+## Step 3 — Embed and store new facts
+Only for candidates that passed Step 2:
+1. Call `embed_chunk` on the finalized fact text to generate its embedding.
+2. Call `write_to_doc` with the fact content plus metadata: category and source context.
+
+## Categories
+Tag each stored fact as one of: preference, decision, action_item, entity, fact, other.
+
+## If nothing is worth saving
+If no candidates survive extraction, or all candidates are duplicates, briefly state that (e.g. "No new information to store — already recorded.") and do not call `embed_chunk` or `write_to_doc`.
+
+## Rules
+- Always call `retrieve` before `embed_chunk`, and `embed_chunk` before `write_to_doc`, for a given candidate — never out of order.
+- Never call `embed_chunk` or `write_to_doc` on a fact you're discarding as a duplicate.
+- Process candidates one at a time through the full retrieve → check → embed → write cycle. Don't batch multiple candidates through retrieve and defer the check.
+- Be terse. Never fabricate. Only extract what's explicitly stated or clearly implied by the input.
+"""
 )
 
 
@@ -136,6 +193,6 @@ if prompt:
     with st.spinner():
 
         result = agent.invoke({"messages": [{"role": "user", "content": prompt}]},config=config)
-        print(result)
+        retrain_result = agent1.invoke({"messages": [{"role": "user", "content": prompt}]})
         st.chat_message("assistant").write(result["messages"][-1].content[0]["text"])
         st.session_state["message"].append({"role":"assistant","content":result["messages"][-1].content[0]["text"]})
