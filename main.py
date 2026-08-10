@@ -41,7 +41,6 @@ def embed_chunk(chunk:str)->list:
     embedding=embedding_model.encode(chunk)
     return embedding.tolist()
 
-()
 def sync_knowledge_base():
     chunks=split_into_chunks("doc.txt")
     embeddings=[embed_chunk(chunk) for chunk in chunks]
