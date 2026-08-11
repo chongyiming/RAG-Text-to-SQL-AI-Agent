@@ -1,0 +1,7 @@
+{
+    "dependencies": ["*"],
+    "graphs": {
+        "personal_agent": "./app/agents/personal_assistant.py:agent"
+    },
+    "env": ".env"
+}

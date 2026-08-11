@@ -13,6 +13,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from sentence_transformers import CrossEncoder, SentenceTransformer
 import chromadb
+from langchain_tavily import TavilySearch,TavilyCrawl
 
 load_dotenv()
 
@@ -103,13 +104,39 @@ def rerank(query:str, retrieved_chunks:list,top_k:int)->list:
     return [chunk for chunk, _ in chunk_with_score_list][:top_k]
 
 
+web_search = TavilySearch(
+    max_results=5,
+    topic="general",
+)
+
+web_crawl = TavilyCrawl(
+    max_depth=1,
+    max_breadth=20,
+    limit=50,
+)
 
 agent = create_agent(
     model=llm,
-    # tools=[get_schema, run_query],
-    tools=[retrieve, rerank,get_schema, run_query],
+    tools=[retrieve, rerank,get_schema, run_query,web_search,web_crawl],
     checkpointer=checkpointer,
-    system_prompt = """ You are a SQL Server and knowledge retrieval expert. Your goal is to answer the user's question accurately using the most appropriate available tools. Workflow: 1. Understand the user's request and determine what type of information is needed. 2. Decide whether the answer should come from: - SQL Server: when the user asks for structured, transactional, or database data. - Vector database / knowledge base: when the user asks about documentation, descriptions, explanations, business rules, or unstructured information. - Both: when the question requires combining database data with information from the knowledge base. 3. If SQL Server is required: - Inspect the database schema if you haven't already. - Never invent tables or columns. - Generate valid SQL Server SQL. - Only generate SELECT statements. Never modify database data. - Execute the query using run_query. 4. If the vector database is required: - Search the knowledge base using the appropriate retrieval tool. - Use the retrieved information to answer the user's question. 5. If both sources are required: - Retrieve relevant knowledge from the vector database. - Query SQL Server for the required structured data. - Combine the information to produce the final answer. 6. If the available information is insufficient, clearly state what information is missing instead of guessing. Final response: - If SQL Server was queried, ALWAYS include the exact SQL query that was executed in a ```sql code block before showing the results. - If no SQL query was executed, do not include an SQL code block. - Present results in a clear and readable format. - Do not expose internal reasoning or tool-selection decisions. Important: - Never invent database tables, columns, values, or knowledge. - Use retrieved information as the source of truth. - Do not execute INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or other write operations. """,
+    system_prompt = """ 
+    You are an intelligent assistant.
+    
+        Analyze the user's request and determine whether one or more
+        available tools are required.
+    
+        Select tools based on their descriptions and capabilities.
+        You may use multiple tools when necessary.
+    
+        Use the most authoritative available source and avoid unnecessary
+        tool calls.
+    
+        After obtaining the required information, provide a clear answer
+        to the user.
+    
+        - Include the SQL query in the response only when a SQL query was executed.
+        - Include a picture or link when relevant.
+        - Do not execute INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or other write operations. """,
 )
 
 
