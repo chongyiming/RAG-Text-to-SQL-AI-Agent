@@ -13,6 +13,7 @@ dependencies = [
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.10",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "langgraph-cli[inmem]>=0.4.31",
     "pyodbc>=5.3.0",
     "python-dotenv>=1.2.2",
     "sentence-transformers>=5.7.0",

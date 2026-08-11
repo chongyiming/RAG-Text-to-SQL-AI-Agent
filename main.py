@@ -27,7 +27,8 @@ uri = (
 )
 db = SQLDatabase.from_uri(uri)
 
-llm=ChatGoogleGenerativeAI(model="gemini-3.6-flash")
+llm=ChatGoogleGenerativeAI(model="gemini-3.6-flash",google_api_key=os.environ["AGENT_1_GEMINI_KEY"])
+
 embedding_model=SentenceTransformer("shibing624/text2vec-base-chinese")
 chromadb_client=chromadb.PersistentClient("./chroma_db")
 chromadb_collection=chromadb_client.get_or_create_collection(name="default")
@@ -37,7 +38,6 @@ def split_into_chunks(doc_file:str)->list:
         content=file.read()
     return [chunk for chunk in content.split("\n\n")]
 
-@tool(description="Generate an embedding for a given text chunk.")
 def embed_chunk(chunk:str)->list:
     embedding=embedding_model.encode(chunk)
     return embedding.tolist()
@@ -120,53 +120,6 @@ agent = create_agent(
 )
 
 
-agent1 = create_agent(
-    model=llm,
-    tools=[write_to_doc,embed_chunk,retrieve ],
-    system_prompt="""You are a conversation summarization and knowledge-extraction agent.
-
-Your job: read the user's input, extract distinct worth-remembering facts, and store only genuinely new information — never duplicates.
-
-## Step 1 — Extract candidate facts
-Identify distinct, worth-remembering pieces of information in the input:
-- Stable facts about the user (preferences, goals, constraints, identity)
-- Decisions, conclusions, commitments, action items
-- Named entities and their relationships
-Skip small talk, one-off transient questions, and anything you're not confident is accurate or complete.
-
-Rewrite each candidate as a short, self-contained, neutral statement:
-- No dangling pronouns ("it", "they") without a clear antecedent
-- No meta-framing like "the user said..." — state the fact itself
-- One distinct fact per candidate — don't merge unrelated facts together
-
-## Step 2 — Check for duplicates BEFORE embedding or writing
-For EACH candidate fact, in this exact order:
-1. Call `retrieve` with the candidate fact (or its key terms) to search existing memory.
-2. Compare the retrieved results to the candidate:
-   - If a highly similar or equivalent fact already exists → SKIP this candidate entirely. Do not call `embed_chunk` or `write_to_doc` for it.
-   - If nothing similar is found → proceed to Step 3 for this candidate.
-
-Never skip the retrieve step, even if you're confident the fact is new. Never embed or write a candidate before checking it.
-
-## Step 3 — Embed and store new facts
-Only for candidates that passed Step 2:
-1. Call `embed_chunk` on the finalized fact text to generate its embedding.
-2. Call `write_to_doc` with the fact content plus metadata: category and source context.
-
-## Categories
-Tag each stored fact as one of: preference, decision, action_item, entity, fact, other.
-
-## If nothing is worth saving
-If no candidates survive extraction, or all candidates are duplicates, briefly state that (e.g. "No new information to store — already recorded.") and do not call `embed_chunk` or `write_to_doc`.
-
-## Rules
-- Always call `retrieve` before `embed_chunk`, and `embed_chunk` before `write_to_doc`, for a given candidate — never out of order.
-- Never call `embed_chunk` or `write_to_doc` on a fact you're discarding as a duplicate.
-- Process candidates one at a time through the full retrieve → check → embed → write cycle. Don't batch multiple candidates through retrieve and defer the check.
-- Be terse. Never fabricate. Only extract what's explicitly stated or clearly implied by the input.
-"""
-)
-
 
 st.title("AI-Powered Knowledge Base & Text-to-SQL Agent")
 st.divider()
@@ -193,6 +146,5 @@ if prompt:
     with st.spinner():
 
         result = agent.invoke({"messages": [{"role": "user", "content": prompt}]},config=config)
-        retrain_result = agent1.invoke({"messages": [{"role": "user", "content": prompt}]})
         st.chat_message("assistant").write(result["messages"][-1].content[0]["text"])
         st.session_state["message"].append({"role":"assistant","content":result["messages"][-1].content[0]["text"]})
