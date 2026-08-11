@@ -104,13 +104,6 @@ def rerank(query:str, retrieved_chunks:list,top_k:int)->list:
 
 
 
-@tool(description="Write the useful info to a txt document.")
-def write_to_doc(info:str):
-    with open("doc.txt", "a") as file:
-        file.write(info)
-
-
-
 agent = create_agent(
     model=llm,
     # tools=[get_schema, run_query],
