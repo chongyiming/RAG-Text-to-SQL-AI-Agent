@@ -14,6 +14,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from sentence_transformers import CrossEncoder, SentenceTransformer
 import chromadb
 from langchain_tavily import TavilySearch,TavilyCrawl
+from langchain_groq import ChatGroq
 
 load_dotenv()
 
@@ -23,13 +24,17 @@ SQL_PASSWORD = quote_plus(os.environ["SQL_PASSWORD"])
 SQL_DATABASE = os.environ["SQL_DATABASE"]
 
 uri = (
-    f"mssql+pyodbc://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_SERVER}:1434/{SQL_DATABASE}"
+    f"mssql+pyodbc://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_SERVER}:1434/master"
     "?driver=ODBC+Driver+17+for+SQL+Server"
 )
 db = SQLDatabase.from_uri(uri)
 
 llm=ChatGoogleGenerativeAI(model="gemini-3.6-flash",google_api_key=os.environ["AGENT_1_GEMINI_KEY"])
+# llm = ChatGroq(
+#     model="qwen/qwen3.6-27b",
+#     api_key=os.getenv("GROQ_API_KEY")
 
+# )
 embedding_model=SentenceTransformer("shibing624/text2vec-base-chinese")
 chromadb_client=chromadb.PersistentClient("./chroma_db")
 chromadb_collection=chromadb_client.get_or_create_collection(name="default")
